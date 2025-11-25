@@ -1,2 +1,115 @@
-# SSD-Semester Project
-Repository for Secure Software Designing Project, Fall 2025.
+# Secure & Encrypted Web-Based Chat Application
+Secure Software Design project proposal for FAST-NUCES, Fall 2025.
+
+## 1. Title of the Project
+- Secure & Encrypted Web-Based Chat Application (codename: VibeChat)
+- Provides verifiable confidentiality, integrity, and availability guarantees for browser-based conversations
+- Serves as a reference implementation for secure software design practices in academic settings
+
+## 2. Team Information
+- **Section:** CY-C, FAST School of Computing, Islamabad
+- **Team Name:** Vibe Coders
+- **Members:**
+  - Talha Asghar — i221554
+  - Uzzam Arif — i221748
+  - Adeen Ilyas — i221573
+  - Abdul Hanan — i221586
+  - Ammar Bangash — i221626
+
+## 3. Problem Statement
+Modern web chat tools centralize message storage and cryptography, exposing users to:
+- Server-side data breaches that leak unencrypted or weakly encrypted conversations.
+- Man-in-the-middle (MITM) attacks where adversaries tamper with public keys, TLS certs, or session tokens during key exchange.
+- Insider threats where platform operators can inspect message payloads or respond to coercive data demands.
+- Regulatory and compliance gaps when confidentiality assurances cannot be proven or audited.
+
+These risks translate into reputational damage, legal liability, and a lack of user trust. We aim to eliminate provider visibility into user content by enforcing client-side end-to-end encryption (E2EE), auditable key authenticity, and secure key custody from project inception.
+
+## 4. Objectives of the Project
+1. Ship a browser-based chat experience that enables one-to-one and group messaging with default E2EE.
+2. Implement zero-knowledge key management so private keys never leave user control; introduce passphrase-based key wrapping plus recovery options.
+3. Maintain a “dumb relay” backend that only handles authentication, presence, and ciphertext transport.
+4. Embed mitigations for MITM, replay, CSRF, XSS, and injection vectors by combining secure headers, CSP, sanitization, and certificate pinning guidance.
+5. Document the security-centric SDLC—from threat modeling through verification—demonstrating adherence to course requirements.
+
+## 5. Proposed Solution & Architecture
+### 5.1 System Overview
+The solution follows a zero-trust, client-driven cryptography model with a minimal backend.
+
+- **Client (React SPA):**
+  - Generates asymmetric key pairs on registration via Web Crypto (Curve25519 / Ed25519 for ECDH + signatures).
+  - Wraps private keys with Argon2id-hardened passphrases and stores them in IndexedDB; session-only keys reside in memory.
+  - Uses access tokens (JWT) for session continuity; refresh logic leverages silent re-auth with short-lived tokens.
+  - Fetches recipient public keys from backend, performs Diffie-Hellman to derive symmetric session keys (XChaCha20-Poly1305) per conversation, and encrypts messages plus attachments locally.
+  - Displays key fingerprints (SHA-256 truncated) so users can verify identities out-of-band and detect key substitutions.
+- **Server (Node.js + Express + WebSocket gateway):**
+  - Handles registration, login, token issuance, multi-factor enrollment, and account recovery workflows.
+  - Persists public keys, device metadata, and encrypted message envelopes in Firebase Firestore with strict security rules.
+  - Relays ciphertext over secure WebSockets; no plaintext is logged or inspected, aligning with least-knowledge architecture.
+  - Implements rate limiting, anomaly detection (suspicious connection patterns), geo-velocity checks, and audit logging for compliance.
+
+### 5.2 Security Principles & Controls
+- **Least Privilege:** Backend can only access metadata; privilege separation between auth API, message relay, and admin tooling enforced via service accounts and IAM.
+- **Defense in Depth:** CSP, HSTS, secure cookies, strict transport security headers, subresource integrity, and automated dependency scanning keep the attack surface constrained.
+- **Key Authenticity:** TOFU (trust on first use) plus manual fingerprint confirmation; future work: integrate Web of Trust, QR verification, or transparency logs.
+- **Forward Secrecy:** Per-message symmetric keys derived using X25519 ratchets; compromised keys do not decrypt historical traffic because session keys are ephemeral.
+- **Availability:** Multi-region Firestore plus queued delivery to tolerate offline recipients; WebSocket fallback to HTTPS long polling ensures continuity during partial outages.
+- **Privacy by Design:** Metadata minimization, optional anonymous display names, and retention policies that purge delivered ciphertext after configurable windows.
+
+### 5.3 Data Flow Summary
+1. User registers → SPA generates keys → private key encrypted (passphrase + Argon2id) → stored in IndexedDB; public key uploaded with integrity checks.
+2. Sender selects chat → SPA fetches recipient public key → derives shared secret → encrypts payload + metadata (nonce, attachments, signatures) → sends to backend relay.
+3. Backend validates sender session, stamps metadata, applies rate limits, and relays ciphertext to recipient channel; undelivered packets reside encrypted in Firestore queues.
+4. Recipient SPA decrypts using local private key; messages never touch disk in plaintext and are optionally re-encrypted for secure local backups.
+
+## 6. Methodology (Security-centric SDLC)
+1. **Requirements & Planning (Weeks 1–4)**
+   - Capture functional + security requirements, define misuse cases, and establish compliance targets (e.g., OWASP ASVS L2, GDPR privacy expectations).
+   - Perform STRIDE-based threat modeling with layered data flow diagrams; document mitigations, assumptions, and residual risk for instructor review.
+2. **Design (Weeks 3–6)**
+   - Define API contracts, database schema, key lifecycle diagrams, and crypto module boundaries.
+   - Review design against NIST SP 800-64 Rev.2 and OWASP Proactive Controls; hold peer design reviews with security checklists.
+3. **Implementation (Weeks 5–12)**
+   - Follow secure coding guidelines, typed interfaces, eslint-plugin-security, Prettier, and Husky hooks; enforce commit signing.
+   - Integrate dependency scanning (npm audit, Snyk) and secret scanning (Git hooks, GitHub Advanced Security) in CI pipelines.
+4. **Verification & Validation (Weeks 9–16)**
+   - Unit + integration tests with Jest/React Testing Library and supertest, focusing on crypto wrappers and transport logic.
+   - Security testing: automated ZAP/Burp scans, dependency vulnerability triage, manual penetration tests focusing on authentication, WebSocket flows, and key attestation.
+   - Prepare adversary emulation scenarios (e.g., MITM, replay, XSS injection) and document outcomes.
+5. **Deployment & Maintenance (Weeks 15–20)**
+   - Containerize services, enable CI/CD with GitHub Actions, and enforce SAST/DAST gates pre-deployment.
+   - Prepare incident response playbooks, logging strategy, monitoring alerts, and key compromise recovery workflow.
+
+## 7. Tools and Technologies
+- **Frontend:** React 18, TypeScript, Vite, TailwindCSS, Zustand/Redux Toolkit for deterministic state, React Query for caching and retries. Storybook aids UI isolation.
+- **Cryptography:** Web Crypto API (SubtleCrypto) for key generation, HKDF, XChaCha20-Poly1305, and Ed25519; libsodium-js bridges any gaps such as secure random padding.
+- **Backend:** Node.js 20, Express, ws/socket.io, Firebase Admin SDK, Firestore, Cloud Functions for message triggers, and Cloud Storage for encrypted attachments.
+- **Security Tooling:** ESLint security plugin, Prettier, Husky + lint-staged, npm audit, Snyk, GitLeaks, OWASP Dependency-Check, OWASP ZAP, Burp Suite Community, Trivy for container scans.
+- **DevOps:** Docker, GitHub Actions, Firebase Hosting, Cloud Logging & Monitoring, Grafana/Prometheus for metrics, and Vault (optional) for secret distribution.
+
+## 8. Expected Deliverables
+- Working SPA + backend demonstrating secure registration, login, messaging, and attachment sharing with E2EE, hosted on Firebase for evaluation.
+- Technical design dossier: architecture diagrams, threat model artifacts, trust boundaries, crypto rationale, and data retention policies.
+- Security test report summarizing tooling, testing scope, findings, fixes, and residual risks, including penetration test evidence.
+- Final presentation + demo with threat walkthrough, lessons learned, and future roadmap (mobile clients, multi-device sync, transparency logs).
+
+## 9. Timeline (20 Weeks)
+| Weeks | Milestones |
+| --- | --- |
+| 1–2 | Requirement elicitation, stakeholder interviews, success metrics |
+| 3–4 | Threat modeling, data flow diagrams, security requirements baseline |
+| 5–6 | UI wireframes, API specs, infrastructure design reviews |
+| 7–8 | Backend scaffolding, auth services, database schema, CI/CD bootstrap |
+| 9–10 | Frontend messaging UI, WebSocket integration, baseline tests |
+| 11–12 | Key management implementation, encryption workflow, secret storage |
+| 13–14 | Real-time messaging hardening, offline delivery, attachment encryption |
+| 15–16 | Security testing (SAST/DAST), performance tuning, telemetry setup |
+| 17–18 | Bug bashes, documentation drafting, compliance checklist |
+| 19–20 | Final integration, rehearsals, project report and presentation submission |
+
+## 10. References
+1. NIST SP 800-53 Rev.5 – Security and Privacy Controls for Information Systems and Organizations.
+2. OWASP Top Ten (2021) – Awareness document for application security.
+3. W3C Web Cryptography API Recommendation (January 2017).
+4. OWASP Application Security Verification Standard (ASVS) v4.0.3.
+5. Signal Protocol Documentation – Reference for double-ratchet-based secure messaging.
