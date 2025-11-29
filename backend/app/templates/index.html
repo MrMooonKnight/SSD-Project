@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-box">
+        <h1>VibeChat</h1>
+        <p class="subtitle">Secure End-to-End Encrypted Chat</p>
+        <div class="auth-buttons">
+            <a href="{{ url_for('frontend.login_page') }}" class="btn btn-primary">Login</a>
+            <a href="{{ url_for('frontend.register_page') }}" class="btn btn-secondary">Register</a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

@@ -28,7 +28,8 @@ def handle_connect(auth: dict | None = None):
         # Verify user exists and is active
         from .extensions import db
 
-        user = db.session.get(User, user_id)
+        # Convert string user_id to int for database query
+        user = db.session.get(User, int(user_id))
         if not user or not user.is_active:
             disconnect()
             return False

@@ -22,7 +22,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "JWT_ACCESS_TOKEN_EXPIRES": 3600,  # 1 hour
     "JWT_REFRESH_TOKEN_EXPIRES": 86400,  # 24 hours
     "ENV": "development",
-    "DEBUG": False,
+    "DEBUG": True,  # Enable debug by default for development
     "TESTING": False,
     "JSON_SORT_KEYS": False,
     "PREFERRED_URL_SCHEME": "https",
@@ -31,7 +31,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "SQLALCHEMY_ECHO": False,
     "RATELIMIT_DEFAULT": "20/minute",
     "RATELIMIT_STORAGE_URI": "memory://",
-    "CORS_ORIGINS": ["http://localhost:5173", "https://localhost:5173"],
+    "CORS_ORIGINS": ["http://localhost:5173", "https://localhost:5173", "http://localhost:5000", "http://127.0.0.1:5000"],
     "SESSION_COOKIE_HTTPONLY": True,
     "SESSION_COOKIE_SAMESITE": "Strict",
     "SESSION_COOKIE_SECURE": True,
@@ -62,6 +62,13 @@ def load_config(app, config_name: str | None = None) -> None:
     secret = settings.get("secret_key")
     if secret:
         app.config["SECRET_KEY"] = secret
+
+    jwt_secret = settings.get("jwt_secret_key")
+    if jwt_secret:
+        app.config["JWT_SECRET_KEY"] = jwt_secret
+    elif not app.config.get("JWT_SECRET_KEY") or app.config["JWT_SECRET_KEY"] == "change-jwt-secret-in-production":
+        # Fall back to SECRET_KEY if JWT_SECRET_KEY is not set or is default
+        app.config["JWT_SECRET_KEY"] = app.config["SECRET_KEY"]
 
     cors_origins = settings.get("cors_origins")
     if cors_origins:

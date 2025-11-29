@@ -13,6 +13,7 @@ from .models import db
 cors = CORS()
 limiter = Limiter(key_func=get_remote_address, storage_uri="memory://")
 jwt = JWTManager()
-socketio = SocketIO(cors_allowed_origins="*", async_mode="eventlet")
+# SocketIO initialized without CORS - will be set in __init__.py
+socketio = SocketIO(async_mode="threading", cors_allowed_origins="*")
 
 

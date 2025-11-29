@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}Register - VibeChat{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-box">
+        <h1>Register</h1>
+        <form id="registerForm">
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" required>
+            </div>
+            <div class="form-group">
+                <label for="display_name">Display Name (optional)</label>
+                <input type="text" id="display_name" name="display_name">
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required minlength="8">
+            </div>
+            <button type="button" id="registerBtn" class="btn btn-primary">Register</button>
+            <div id="error" class="error-message"></div>
+        </form>
+        <p class="auth-link">Already have an account? <a href="{{ url_for('frontend.login_page') }}">Login</a></p>
+    </div>
+</div>
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    function handleRegister() {
+        const errorDiv = document.getElementById('error');
+        const submitBtn = document.getElementById('registerBtn');
+        const emailInput = document.getElementById('email');
+        const displayNameInput = document.getElementById('display_name');
+        const passwordInput = document.getElementById('password');
+        
+        if (!errorDiv || !submitBtn || !emailInput || !passwordInput) {
+            console.error('Required form elements not found');
+            return;
+        }
+        
+        errorDiv.textContent = '';
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Registering...';
+        
+        const email = emailInput.value.trim().toLowerCase();
+        const displayName = displayNameInput ? displayNameInput.value.trim() : '';
+        const password = passwordInput.value;
+        
+        if (!email || !password) {
+            errorDiv.textContent = 'Please fill in all required fields';
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Register';
+            return;
+        }
+        
+        if (password.length < 8) {
+            errorDiv.textContent = 'Password must be at least 8 characters';
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Register';
+            return;
+        }
+        
+        fetch('/api/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, display_name: displayName || null, password })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.access_token) {
+                localStorage.setItem('access_token', data.access_token);
+                localStorage.setItem('refresh_token', data.refresh_token);
+                window.location.href = '/chat';
+            } else {
+                errorDiv.textContent = data.error || 'Registration failed';
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Register';
+            }
+        })
+        .catch(error => {
+            console.error('Registration error:', error);
+            errorDiv.textContent = 'Network error. Please try again.';
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Register';
+        });
+    }
+    
+    const registerBtn = document.getElementById('registerBtn');
+    const form = document.getElementById('registerForm');
+    
+    if (registerBtn) {
+        registerBtn.addEventListener('click', handleRegister);
+    } else {
+        console.error('Register button not found');
+    }
+    
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            handleRegister();
+        });
+    }
+});
+</script>
+{% endblock %}
+{% endblock %}
+

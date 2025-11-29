@@ -18,7 +18,7 @@ class User(db.Model):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    username: Mapped[str] = mapped_column(String(80), unique=True, nullable=False, index=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     display_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -40,9 +40,39 @@ class User(db.Model):
     received_messages: Mapped[list["Message"]] = relationship(
         "Message", foreign_keys="Message.recipient_id", back_populates="recipient"
     )
+    contacts: Mapped[list["Contact"]] = relationship(
+        "Contact", foreign_keys="Contact.user_id", back_populates="user"
+    )
+    contact_of: Mapped[list["Contact"]] = relationship(
+        "Contact", foreign_keys="Contact.contact_id", back_populates="contact"
+    )
 
     def __repr__(self) -> str:
-        return f"<User {self.username}>"
+        return f"<User {self.email}>"
+
+
+class Contact(db.Model):
+    """User contacts model."""
+
+    __tablename__ = "contacts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    contact_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+    # Relationships
+    user: Mapped["User"] = relationship("User", foreign_keys=[user_id], back_populates="contacts")
+    contact: Mapped["User"] = relationship("User", foreign_keys=[contact_id], back_populates="contact_of")
+
+    __table_args__ = (
+        Index("idx_contact_user_contact", "user_id", "contact_id", unique=True),
+    )
+
+    def __repr__(self) -> str:
+        return f"<Contact user_id={self.user_id} contact_id={self.contact_id}>"
 
 
 class PublicKey(db.Model):
@@ -83,7 +113,8 @@ class Message(db.Model):
     sender_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     recipient_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     ciphertext: Mapped[str] = mapped_column(Text, nullable=False)  # Base64-encoded encrypted payload
-    nonce: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)  # Encryption nonce if applicable
+    nonce: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)  # Encryption nonce/IV
+    salt: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)  # PBKDF2 salt for key derivation
     message_type: Mapped[str] = mapped_column(String(20), nullable=False, default="text")  # text, attachment, etc.
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False, index=True
@@ -102,4 +133,3 @@ class Message(db.Model):
 
     def __repr__(self) -> str:
         return f"<Message {self.id} from {self.sender_id} to {self.recipient_id}>"
-

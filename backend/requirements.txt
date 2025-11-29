@@ -18,6 +18,5 @@ bandit==1.7.9
 black==24.8.0
 ruff==0.6.9
 python-socketio==5.11.0
-eventlet==0.36.1
 
 

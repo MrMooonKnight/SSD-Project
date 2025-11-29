@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block title %}Login - VibeChat{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-box">
+        <h1>Login</h1>
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            <button type="button" id="loginBtn" class="btn btn-primary">Login</button>
+            <div id="error" class="error-message"></div>
+        </form>
+        <p class="auth-link">Don't have an account? <a href="{{ url_for('frontend.register_page') }}">Register</a></p>
+    </div>
+</div>
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    function handleLogin() {
+        const errorDiv = document.getElementById('error');
+        const submitBtn = document.getElementById('loginBtn');
+        const emailInput = document.getElementById('email');
+        const passwordInput = document.getElementById('password');
+        
+        if (!errorDiv || !submitBtn || !emailInput || !passwordInput) {
+            console.error('Required form elements not found');
+            return;
+        }
+        
+        errorDiv.textContent = '';
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Logging in...';
+        
+        const email = emailInput.value.trim().toLowerCase();
+        const password = passwordInput.value;
+        
+        if (!email || !password) {
+            errorDiv.textContent = 'Please fill in all fields';
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Login';
+            return;
+        }
+        
+        fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(err => {
+                    throw new Error(err.error || 'Login failed');
+                });
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.access_token) {
+                // Trim any whitespace from tokens
+                const accessToken = data.access_token.trim();
+                const refreshToken = data.refresh_token.trim();
+                
+                if (!accessToken || !refreshToken) {
+                    throw new Error('Invalid token received from server');
+                }
+                
+                localStorage.setItem('access_token', accessToken);
+                localStorage.setItem('refresh_token', refreshToken);
+                window.location.href = '/chat';
+            } else {
+                errorDiv.textContent = data.error || 'Login failed';
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Login';
+            }
+        })
+        .catch(error => {
+            console.error('Login error:', error);
+            errorDiv.textContent = 'Network error. Please try again.';
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Login';
+        });
+    }
+    
+    const loginBtn = document.getElementById('loginBtn');
+    const form = document.getElementById('loginForm');
+    
+    if (loginBtn) {
+        loginBtn.addEventListener('click', handleLogin);
+    } else {
+        console.error('Login button not found');
+    }
+    
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            handleLogin();
+        });
+    }
+});
+</script>
+{% endblock %}
+{% endblock %}
+

@@ -18,18 +18,19 @@ messages_bp = Blueprint("messages", __name__)
 @jwt_required()
 def send_message():
     """Send an encrypted message to a recipient."""
-    current_user_id = get_jwt_identity()
+    current_user_id = int(get_jwt_identity())  # Convert string to int
     payload = request.get_json(silent=True) or {}
 
-    recipient_username = payload.get("recipient")
+    recipient_email = payload.get("recipient", "").strip().lower()
     ciphertext = payload.get("ciphertext")
     nonce = payload.get("nonce")
+    salt = payload.get("salt")
     message_type = payload.get("message_type", "text")
 
-    if not recipient_username or not ciphertext:
+    if not recipient_email or not ciphertext:
         return jsonify({"error": "recipient and ciphertext required"}), HTTPStatus.BAD_REQUEST
 
-    recipient = User.query.filter_by(username=recipient_username, is_active=True).first()
+    recipient = User.query.filter_by(email=recipient_email, is_active=True).first()
     if not recipient:
         return jsonify({"error": "recipient not found"}), HTTPStatus.NOT_FOUND
 
@@ -42,6 +43,7 @@ def send_message():
         recipient_id=recipient.id,
         ciphertext=ciphertext,
         nonce=nonce,
+        salt=salt,
         message_type=message_type,
     )
     db.session.add(message)
@@ -56,6 +58,7 @@ def send_message():
             "recipient_id": recipient.id,
             "ciphertext": ciphertext,
             "nonce": nonce,
+            "salt": salt,
             "message_type": message_type,
             "created_at": message.created_at.isoformat(),
         },
@@ -78,7 +81,7 @@ def send_message():
 @jwt_required()
 def get_inbox():
     """Retrieve received messages for current user."""
-    current_user_id = get_jwt_identity()
+    current_user_id = int(get_jwt_identity())  # Convert string to int
     limit = request.args.get("limit", 50, type=int)
     offset = request.args.get("offset", 0, type=int)
 
@@ -93,17 +96,19 @@ def get_inbox():
     return jsonify(
         {
             "messages": [
-                {
-                    "id": msg.id,
-                    "sender_id": msg.sender_id,
-                    "sender_username": msg.sender.username,
-                    "ciphertext": msg.ciphertext,
-                    "nonce": msg.nonce,
-                    "message_type": msg.message_type,
-                    "created_at": msg.created_at.isoformat(),
-                    "delivered_at": msg.delivered_at.isoformat() if msg.delivered_at else None,
-                    "read_at": msg.read_at.isoformat() if msg.read_at else None,
-                }
+            {
+                "id": msg.id,
+                "sender_id": msg.sender_id,
+                "sender_email": msg.sender.email,
+                "sender_display_name": msg.sender.display_name,
+                "ciphertext": msg.ciphertext,
+                "nonce": msg.nonce,
+                "salt": msg.salt,
+                "message_type": msg.message_type,
+                "created_at": msg.created_at.isoformat(),
+                "delivered_at": msg.delivered_at.isoformat() if msg.delivered_at else None,
+                "read_at": msg.read_at.isoformat() if msg.read_at else None,
+            }
                 for msg in messages
             ],
             "count": len(messages),
@@ -115,7 +120,7 @@ def get_inbox():
 @jwt_required()
 def get_sent_messages():
     """Retrieve sent messages for current user."""
-    current_user_id = get_jwt_identity()
+    current_user_id = int(get_jwt_identity())  # Convert string to int
     limit = request.args.get("limit", 50, type=int)
     offset = request.args.get("offset", 0, type=int)
 
@@ -130,16 +135,18 @@ def get_sent_messages():
     return jsonify(
         {
             "messages": [
-                {
-                    "id": msg.id,
-                    "recipient_id": msg.recipient_id,
-                    "recipient_username": msg.recipient.username,
-                    "ciphertext": msg.ciphertext,
-                    "nonce": msg.nonce,
-                    "message_type": msg.message_type,
-                    "created_at": msg.created_at.isoformat(),
-                    "delivered_at": msg.delivered_at.isoformat() if msg.delivered_at else None,
-                }
+            {
+                "id": msg.id,
+                "recipient_id": msg.recipient_id,
+                "recipient_email": msg.recipient.email,
+                "recipient_display_name": msg.recipient.display_name,
+                "ciphertext": msg.ciphertext,
+                "nonce": msg.nonce,
+                "salt": msg.salt,
+                "message_type": msg.message_type,
+                "created_at": msg.created_at.isoformat(),
+                "delivered_at": msg.delivered_at.isoformat() if msg.delivered_at else None,
+            }
                 for msg in messages
             ],
             "count": len(messages),
@@ -151,7 +158,7 @@ def get_sent_messages():
 @jwt_required()
 def mark_delivered(message_id: int):
     """Mark a message as delivered."""
-    current_user_id = get_jwt_identity()
+    current_user_id = int(get_jwt_identity())  # Convert string to int
     message = Message.query.filter_by(id=message_id, recipient_id=current_user_id).first()
 
     if not message:
@@ -168,7 +175,7 @@ def mark_delivered(message_id: int):
 @jwt_required()
 def mark_read(message_id: int):
     """Mark a message as read."""
-    current_user_id = get_jwt_identity()
+    current_user_id = int(get_jwt_identity())  # Convert string to int
     message = Message.query.filter_by(id=message_id, recipient_id=current_user_id).first()
 
     if not message:
