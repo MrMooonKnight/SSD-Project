@@ -137,6 +137,9 @@ def get_sent_messages():
             "messages": [
             {
                 "id": msg.id,
+                "sender_id": msg.sender_id,
+                "sender_email": msg.sender.email,
+                "sender_display_name": msg.sender.display_name,
                 "recipient_id": msg.recipient_id,
                 "recipient_email": msg.recipient.email,
                 "recipient_display_name": msg.recipient.display_name,
@@ -169,6 +172,28 @@ def mark_delivered(message_id: int):
         db.session.commit()
 
     return jsonify({"message": "marked as delivered"}), HTTPStatus.OK
+
+
+@messages_bp.delete("/conversation/<email>")
+@jwt_required()
+def clear_conversation(email: str):
+    """Delete all messages in a conversation with a specific user."""
+    current_user_id = int(get_jwt_identity())  # Convert string to int
+    
+    # Find the other user
+    other_user = User.query.filter_by(email=email.lower(), is_active=True).first()
+    if not other_user:
+        return jsonify({"error": "user not found"}), HTTPStatus.NOT_FOUND
+    
+    # Delete all messages where current user is sender or recipient with the other user
+    deleted = Message.query.filter(
+        ((Message.sender_id == current_user_id) & (Message.recipient_id == other_user.id)) |
+        ((Message.sender_id == other_user.id) & (Message.recipient_id == current_user_id))
+    ).delete(synchronize_session=False)
+    
+    db.session.commit()
+    
+    return jsonify({"message": f"Deleted {deleted} messages"}), HTTPStatus.OK
 
 
 @messages_bp.post("/<int:message_id>/read")

@@ -71,29 +71,76 @@ class CryptoManager {
             const keyData = this.base64ToArrayBuffer(base64Key);
             
             // Validate key data size (ECDH P-256 public key should be ~91 bytes in SPKI format)
-            // But allow some flexibility
             if (keyData.byteLength < 64 || keyData.byteLength > 200) {
                 throw new Error(`Invalid key size: ${keyData.byteLength} bytes. Expected ~91 bytes for ECDH P-256 SPKI.`);
             }
             
-            return await window.crypto.subtle.importKey(
-                "spki",
-                keyData,
-                {
-                    name: "ECDH",
-                    namedCurve: "P-256"
-                },
-                true,
-                ["deriveKey", "deriveBits"]
-            );
+            // Check if key starts with correct SPKI header (0x30 = ASN.1 SEQUENCE)
+            const firstBytes = new Uint8Array(keyData.slice(0, 10));
+            const hexBytes = Array.from(firstBytes).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' ');
+            
+            if (firstBytes[0] !== 0x30) {
+                console.error('Key does not start with ASN.1 SEQUENCE (0x30). First 10 bytes:', hexBytes);
+                console.error('This indicates the key binary data is corrupted, not just the encoding.');
+                throw new Error('Invalid key format: Key binary data is corrupted. The contact needs to log in again to regenerate their key.');
+            }
+            
+            // Log key structure for debugging
+            console.log(`Key structure check: First byte=0x30 (OK), Size=${keyData.byteLength} bytes, First 10 bytes: ${hexBytes}`);
+            
+            // Ensure we have a proper ArrayBuffer (not a view)
+            // Create a new ArrayBuffer to ensure it's clean
+            const cleanBuffer = new ArrayBuffer(keyData.byteLength);
+            const sourceView = new Uint8Array(keyData);
+            const targetView = new Uint8Array(cleanBuffer);
+            targetView.set(sourceView);
+            
+            try {
+                return await window.crypto.subtle.importKey(
+                    "spki",
+                    cleanBuffer,
+                    {
+                        name: "ECDH",
+                        namedCurve: "P-256"
+                    },
+                    true,
+                    ["deriveKey", "deriveBits"]
+                );
+            } catch (importError) {
+                // Log the actual DOMException details
+                console.error('Web Crypto API importKey failed:', {
+                    name: importError.name,
+                    message: importError.message,
+                    code: importError.code,
+                    keySize: keyData.byteLength,
+                    firstBytes: hexBytes
+                });
+                
+                // If it's a SyntaxError with code 12, the key format is invalid
+                // This usually means the ASN.1 structure is malformed
+                if (importError.name === 'SyntaxError' || importError.code === 12) {
+                    throw new Error('Key format is invalid - ASN.1 structure may be corrupted. The contact needs to regenerate their key.');
+                }
+                throw importError;
+            }
         } catch (error) {
-            if (error.message && (error.message.includes('Invalid key size') || error.message.includes('Invalid base64'))) {
+            if (error.message && (error.message.includes('Invalid key size') || error.message.includes('Invalid key format'))) {
                 throw error;
             }
             // Provide more context about the error
             const errorMsg = error.message || String(error);
-            if (errorMsg.includes('invalid') || errorMsg.includes('illegal')) {
-                throw new Error(`Failed to import public key: The key data is invalid or corrupted. Key length: ${base64Key.length}, Decoded size: ${this.base64ToArrayBuffer(base64Key).byteLength} bytes. The contact needs to regenerate their key.`);
+            const decodedSize = this.base64ToArrayBuffer(base64Key).byteLength;
+            
+            // Log detailed error info
+            console.error('Key import failed. Details:', {
+                base64Length: base64Key.length,
+                decodedSize: decodedSize,
+                errorMessage: errorMsg,
+                errorName: error.name
+            });
+            
+            if (errorMsg.includes('invalid') || errorMsg.includes('illegal') || errorMsg.includes('DataError') || error.name === 'DataError') {
+                throw new Error(`Failed to import public key: The key data is corrupted or invalid. Base64 length: ${base64Key.length}, Decoded size: ${decodedSize} bytes. The contact needs to log in again to regenerate their key.`);
             }
             throw new Error(`Failed to import public key: ${errorMsg}`);
         }
