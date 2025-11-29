@@ -3,23 +3,46 @@ Secure Software Design project proposal for FAST-NUCES, Fall 2025.
 
 ## Implementation Overview
 
-The repository hosts a fully functional Flask backend for the secure chat relay with the following structure:
+VibeChat is a fully functional secure chat application with end-to-end encryption. The system implements a zero-knowledge architecture where the server never has access to plaintext messages.
 
-### Backend Structure
-- `backend/app/__init__.py`: Application factory with Flask-SocketIO integration
-- `backend/app/config.py`: Dynaconf-based configuration (dev/test/prod)
-- `backend/app/models.py`: SQLAlchemy models (User, PublicKey, Message)
-- `backend/app/extensions.py`: Flask extensions (CORS, JWT, SQLAlchemy, SocketIO, Limiter)
-- `backend/app/routes/`: API blueprints
-  - `auth.py`: Registration, login, JWT token management
-  - `keys.py`: Public key upload/retrieval for E2EE
-  - `messages.py`: Encrypted message relay endpoints
-  - `health.py`: Health check endpoints
-- `backend/app/socketio_handlers.py`: WebSocket event handlers for real-time messaging
-- `backend/app/security/headers.py`: Security headers (CSP, HSTS, etc.)
-- `backend/run.py`: Development server entry point
-- `backend/wsgi.py`: Production WSGI entry point
-- `backend/tests/`: Pytest test suite
+### Project Structure
+
+```
+SSD-Project/
+├── backend/
+│   ├── app/                    # Main application package
+│   │   ├── __init__.py         # Application factory
+│   │   ├── config.py           # Configuration management (Dynaconf)
+│   │   ├── extensions.py       # Flask extensions initialization
+│   │   ├── models.py           # SQLAlchemy database models
+│   │   ├── routes/             # API route blueprints
+│   │   │   ├── auth.py         # Authentication endpoints
+│   │   │   ├── contacts.py     # Contact management
+│   │   │   ├── frontend.py     # Frontend route handlers
+│   │   │   ├── health.py       # Health check endpoints
+│   │   │   ├── keys.py         # Public key management
+│   │   │   └── messages.py     # Message relay endpoints
+│   │   ├── security/
+│   │   │   └── headers.py      # Security headers configuration
+│   │   ├── socketio_handlers.py # WebSocket event handlers
+│   │   ├── static/             # Frontend assets
+│   │   │   ├── css/
+│   │   │   │   └── style.css   # Application styles
+│   │   │   └── js/
+│   │   │       ├── crypto.js   # Web Crypto API wrapper
+│   │   │       └── chat.js     # Chat application logic
+│   │   └── templates/          # Jinja2 HTML templates
+│   │       ├── base.html
+│   │       ├── chat.html
+│   │       ├── login.html
+│   │       └── register.html
+│   ├── tests/                  # Test suite
+│   ├── requirements.txt        # Python dependencies
+│   ├── run.py                  # Development server
+│   └── wsgi.py                 # Production WSGI entry point
+├── architecture.md             # Detailed architecture documentation
+└── README.md                   # This file
+```
 
 ### API Endpoints
 
@@ -31,30 +54,45 @@ The repository hosts a fully functional Flask backend for the secure chat relay 
 
 #### Public Keys (`/api/keys`)
 - `POST /api/keys/upload` - Upload/update user's public key
-- `GET /api/keys/<username>` - Get public key by username
+- `GET /api/keys/email/<email>` - Get public key by user email
 - `GET /api/keys/me` - Get current user's public key
 
 #### Messages (`/api/messages`)
 - `POST /api/messages/send` - Send encrypted message
-- `GET /api/messages/inbox` - Get received messages
-- `GET /api/messages/sent` - Get sent messages
+- `GET /api/messages/inbox` - Get received messages (paginated)
+- `GET /api/messages/sent` - Get sent messages (paginated)
+- `DELETE /api/messages/conversation/<email>` - Clear conversation with user
 - `POST /api/messages/<id>/delivered` - Mark message as delivered
 - `POST /api/messages/<id>/read` - Mark message as read
+
+#### Contacts (`/api/contacts`)
+- `POST /api/contacts/add` - Add contact by email
+- `GET /api/contacts/list` - Get all contacts
+- `DELETE /api/contacts/<id>` - Remove contact
 
 #### WebSocket Events
 - `connect` - Authenticate and join user room
 - `new_message` - Real-time message delivery
 - `disconnect` - Cleanup on disconnect
 
+## Quick Start
+
+### Prerequisites
+- Python 3.12 or higher
+- pip package manager
+
 ### Local Development (Windows/PowerShell)
 
 ```powershell
+# Navigate to project directory
+cd SSD-Project
+
 # Setup virtual environment
-python -m venv .venv
-.\.venv\Scripts\activate
+python -m venv backend\venv
+backend\venv\Scripts\Activate.ps1
 
 # Install dependencies
-python -m pip install -r backend\requirements.txt
+pip install -r backend\requirements.txt
 
 # Set environment variables (optional, defaults provided)
 $env:VIBE_SECRET_KEY = "your-secret-key-here"
@@ -67,19 +105,70 @@ python run.py
 
 The server will start on `http://localhost:5000` with WebSocket support.
 
+### Using the Application
+
+1. **Register a new account**: Navigate to `http://localhost:5000/register`
+2. **Login**: Use your credentials at `http://localhost:5000/login`
+3. **Add contacts**: Click "+ Add" in the contacts section and enter a user's email
+4. **Start chatting**: Select a contact and send encrypted messages
+
+### Testing with Multiple Users
+
+1. Open the application in two different browsers (or incognito windows)
+2. Register two different accounts
+3. Add each other as contacts
+4. Start sending messages - they will be encrypted end-to-end
+
 ### Run Tests & Static Analysis
 
 ```powershell
+# Activate virtual environment
+backend\venv\Scripts\Activate.ps1
+
 # Run tests
-.\.venv\Scripts\python -m pytest backend\tests -v
+pytest backend\tests -v
 
 # Security linting
-.\.venv\Scripts\bandit -r backend
+bandit -r backend
 
 # Code formatting check
-.\.venv\Scripts\ruff check backend
-.\.venv\Scripts\black --check backend
+ruff check backend
+black --check backend
 ```
+
+## Features
+
+### Security Features
+- **End-to-End Encryption**: Messages encrypted using ECDH key exchange and AES-GCM
+- **Zero-Knowledge Architecture**: Server never sees plaintext messages
+- **Secure Key Management**: Public keys stored with SHA-256 fingerprints
+- **JWT Authentication**: Secure session management with access and refresh tokens
+- **Security Headers**: CSP, HSTS, X-Frame-Options, and more
+
+### Application Features
+- **User Registration & Login**: Secure account creation and authentication
+- **Contact Management**: Add and manage contacts by email
+- **Real-Time Messaging**: WebSocket-based instant message delivery
+- **Message History**: View conversation history with any contact
+- **Clear Conversations**: Delete all messages in a conversation
+
+## Architecture
+
+For detailed architecture documentation, see [architecture.md](architecture.md).
+
+### Key Components
+- **Backend**: Flask application with SQLAlchemy ORM
+- **Frontend**: Vanilla JavaScript with Web Crypto API
+- **Database**: SQLite (development) / PostgreSQL (production-ready)
+- **Real-Time**: Flask-SocketIO for WebSocket communication
+- **Encryption**: Web Crypto API (ECDH P-256, AES-GCM 256-bit)
+
+## Documentation
+
+- [Architecture Documentation](architecture.md) - Detailed system architecture
+- [API Documentation](backend/API.md) - API endpoint reference
+- [Frontend Guide](FRONTEND_GUIDE.md) - Frontend implementation details
+- [Testing Guide](backend/TESTING.md) - Testing procedures
 
 ## 1. Title of the Project
 - Secure & Encrypted Web-Based Chat Application (codename: VibeChat)
@@ -161,11 +250,11 @@ The solution follows a zero-trust, client-driven cryptography model with a minim
    - Prepare incident response playbooks, logging strategy, monitoring alerts, and key compromise recovery workflow.
 
 ## 7. Tools and Technologies
-- **Frontend:** React 18, TypeScript, Vite, TailwindCSS, Zustand/Redux Toolkit for deterministic state, React Query for caching and retries. Storybook aids UI isolation.
-- **Cryptography:** Web Crypto API (SubtleCrypto) for key generation, HKDF, XChaCha20-Poly1305, and Ed25519; libsodium-js bridges any gaps such as secure random padding.
-- **Backend:** Python 3.12, Flask 3.0, Flask-SocketIO, SQLAlchemy, SQLite (dev) / PostgreSQL (prod), Gunicorn for production deployment.
-- **Security Tooling:** ESLint security plugin, Prettier, Husky + lint-staged, npm audit, Snyk, GitLeaks, OWASP Dependency-Check, OWASP ZAP, Burp Suite Community, Trivy for container scans.
-- **DevOps:** Docker, GitHub Actions, Firebase Hosting, Cloud Logging & Monitoring, Grafana/Prometheus for metrics, and Vault (optional) for secret distribution.
+- **Frontend:** Vanilla JavaScript, Web Crypto API, Socket.IO client, Custom CSS
+- **Cryptography:** Web Crypto API (SubtleCrypto) for ECDH key generation, AES-GCM encryption, PBKDF2 key derivation
+- **Backend:** Python 3.12+, Flask 3.0, Flask-SocketIO, SQLAlchemy, SQLite (dev) / PostgreSQL (prod), Gunicorn for production
+- **Security Tooling:** Bandit (security linting), Ruff (code linting), Black (code formatting), Pytest (testing)
+- **DevOps:** Gunicorn (WSGI server), environment-based configuration with Dynaconf
 
 ## 8. Expected Deliverables
 - Working SPA + backend demonstrating secure registration, login, messaging, and attachment sharing with E2EE, hosted on Firebase for evaluation.
