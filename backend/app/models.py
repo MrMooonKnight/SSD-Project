@@ -12,6 +12,51 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 db = SQLAlchemy()
 
 
+class ChatRoom(db.Model):
+    """Chat room model - identified by URL slug."""
+
+    __tablename__ = "chat_rooms"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    room_slug: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    last_message_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Relationships
+    messages: Mapped[list["RoomMessage"]] = relationship("RoomMessage", back_populates="room", cascade="all, delete-orphan")
+
+    __table_args__ = (Index("idx_room_slug", "room_slug"),)
+
+    def __repr__(self) -> str:
+        return f"<ChatRoom {self.room_slug}>"
+
+
+class RoomMessage(db.Model):
+    """Message model for room-based chat."""
+
+    __tablename__ = "room_messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    room_id: Mapped[int] = mapped_column(ForeignKey("chat_rooms.id", ondelete="CASCADE"), nullable=False, index=True)
+    username: Mapped[str] = mapped_column(String(100), nullable=False)  # Username of sender
+    content: Mapped[str] = mapped_column(Text, nullable=False)  # Plain text message content
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False, index=True
+    )
+
+    # Relationships
+    room: Mapped["ChatRoom"] = relationship("ChatRoom", back_populates="messages")
+
+    __table_args__ = (
+        Index("idx_message_room_created", "room_id", "created_at"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<RoomMessage {self.id} in room {self.room_id} from {self.username}>"
+
+
 class User(db.Model):
     """User account model."""
 

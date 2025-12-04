@@ -1,52 +1,54 @@
-"""Message relay endpoints for encrypted messages."""
+"""Message endpoints for room-based chat (no authentication required)."""
 
 from __future__ import annotations
 
 from http import HTTPStatus
-from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from ..extensions import db, socketio
-from ..models import Message, User
+from ..models import ChatRoom, RoomMessage
 
 messages_bp = Blueprint("messages", __name__)
 
 
-@messages_bp.post("/send")
-@jwt_required()
-def send_message():
-    """Send an encrypted message to a recipient."""
-    current_user_id = int(get_jwt_identity())  # Convert string to int
+@messages_bp.post("/rooms/<room_slug>/messages")
+def send_message(room_slug: str):
+    """Send a message to a chat room."""
     payload = request.get_json(silent=True) or {}
+    username = payload.get("username", "").strip()
+    content = payload.get("content", "").strip()
 
-    recipient_email = payload.get("recipient", "").strip().lower()
-    ciphertext = payload.get("ciphertext")
-    nonce = payload.get("nonce")
-    salt = payload.get("salt")
-    message_type = payload.get("message_type", "text")
+    if not username:
+        return jsonify({"error": "username required"}), HTTPStatus.BAD_REQUEST
 
-    if not recipient_email or not ciphertext:
-        return jsonify({"error": "recipient and ciphertext required"}), HTTPStatus.BAD_REQUEST
+    if not content:
+        return jsonify({"error": "content required"}), HTTPStatus.BAD_REQUEST
 
-    recipient = User.query.filter_by(email=recipient_email, is_active=True).first()
-    if not recipient:
-        return jsonify({"error": "recipient not found"}), HTTPStatus.NOT_FOUND
+    if len(username) > 100:
+        return jsonify({"error": "username too long (max 100 characters)"}), HTTPStatus.BAD_REQUEST
 
-    if recipient.id == current_user_id:
-        return jsonify({"error": "cannot send message to yourself"}), HTTPStatus.BAD_REQUEST
+    if len(content) > 10000:
+        return jsonify({"error": "message too long (max 10000 characters)"}), HTTPStatus.BAD_REQUEST
 
-    # Create message record
-    message = Message(
-        sender_id=current_user_id,
-        recipient_id=recipient.id,
-        ciphertext=ciphertext,
-        nonce=nonce,
-        salt=salt,
-        message_type=message_type,
+    # Get or create room
+    room = ChatRoom.query.filter_by(room_slug=room_slug).first()
+    if not room:
+        room = ChatRoom(room_slug=room_slug)
+        db.session.add(room)
+        db.session.flush()  # Get room.id
+
+    # Create message
+    message = RoomMessage(
+        room_id=room.id,
+        username=username,
+        content=content,
     )
     db.session.add(message)
+    
+    # Update room's last_message_at
+    room.last_message_at = message.created_at
+    
     db.session.commit()
 
     # Emit via WebSocket for real-time delivery
@@ -54,15 +56,12 @@ def send_message():
         "new_message",
         {
             "message_id": message.id,
-            "sender_id": current_user_id,
-            "recipient_id": recipient.id,
-            "ciphertext": ciphertext,
-            "nonce": nonce,
-            "salt": salt,
-            "message_type": message_type,
+            "room_slug": room_slug,
+            "username": username,
+            "content": content,
             "created_at": message.created_at.isoformat(),
         },
-        room=f"user_{recipient.id}",
+        room=f"room_{room_slug}",
     )
 
     return (
@@ -77,17 +76,20 @@ def send_message():
     )
 
 
-@messages_bp.get("/inbox")
-@jwt_required()
-def get_inbox():
-    """Retrieve received messages for current user."""
-    current_user_id = int(get_jwt_identity())  # Convert string to int
-    limit = request.args.get("limit", 50, type=int)
+@messages_bp.get("/rooms/<room_slug>/messages")
+def get_messages(room_slug: str):
+    """Retrieve messages for a chat room."""
+    room = ChatRoom.query.filter_by(room_slug=room_slug).first()
+    if not room:
+        # Return empty list if room doesn't exist
+        return jsonify({"messages": [], "count": 0}), HTTPStatus.OK
+
+    limit = request.args.get("limit", 100, type=int)
     offset = request.args.get("offset", 0, type=int)
 
     messages = (
-        Message.query.filter_by(recipient_id=current_user_id)
-        .order_by(Message.created_at.desc())
+        RoomMessage.query.filter_by(room_id=room.id)
+        .order_by(RoomMessage.created_at.asc())
         .limit(limit)
         .offset(offset)
         .all()
@@ -96,19 +98,12 @@ def get_inbox():
     return jsonify(
         {
             "messages": [
-            {
-                "id": msg.id,
-                "sender_id": msg.sender_id,
-                "sender_email": msg.sender.email,
-                "sender_display_name": msg.sender.display_name,
-                "ciphertext": msg.ciphertext,
-                "nonce": msg.nonce,
-                "salt": msg.salt,
-                "message_type": msg.message_type,
-                "created_at": msg.created_at.isoformat(),
-                "delivered_at": msg.delivered_at.isoformat() if msg.delivered_at else None,
-                "read_at": msg.read_at.isoformat() if msg.read_at else None,
-            }
+                {
+                    "id": msg.id,
+                    "username": msg.username,
+                    "content": msg.content,
+                    "created_at": msg.created_at.isoformat(),
+                }
                 for msg in messages
             ],
             "count": len(messages),
@@ -116,101 +111,18 @@ def get_inbox():
     ), HTTPStatus.OK
 
 
-@messages_bp.get("/sent")
-@jwt_required()
-def get_sent_messages():
-    """Retrieve sent messages for current user."""
-    current_user_id = int(get_jwt_identity())  # Convert string to int
-    limit = request.args.get("limit", 50, type=int)
-    offset = request.args.get("offset", 0, type=int)
+@messages_bp.delete("/rooms/<room_slug>/messages")
+def clear_messages(room_slug: str):
+    """Delete all messages in a chat room."""
+    room = ChatRoom.query.filter_by(room_slug=room_slug).first()
+    if not room:
+        return jsonify({"error": "room not found"}), HTTPStatus.NOT_FOUND
 
-    messages = (
-        Message.query.filter_by(sender_id=current_user_id)
-        .order_by(Message.created_at.desc())
-        .limit(limit)
-        .offset(offset)
-        .all()
-    )
-
-    return jsonify(
-        {
-            "messages": [
-            {
-                "id": msg.id,
-                "sender_id": msg.sender_id,
-                "sender_email": msg.sender.email,
-                "sender_display_name": msg.sender.display_name,
-                "recipient_id": msg.recipient_id,
-                "recipient_email": msg.recipient.email,
-                "recipient_display_name": msg.recipient.display_name,
-                "ciphertext": msg.ciphertext,
-                "nonce": msg.nonce,
-                "salt": msg.salt,
-                "message_type": msg.message_type,
-                "created_at": msg.created_at.isoformat(),
-                "delivered_at": msg.delivered_at.isoformat() if msg.delivered_at else None,
-            }
-                for msg in messages
-            ],
-            "count": len(messages),
-        }
-    ), HTTPStatus.OK
-
-
-@messages_bp.post("/<int:message_id>/delivered")
-@jwt_required()
-def mark_delivered(message_id: int):
-    """Mark a message as delivered."""
-    current_user_id = int(get_jwt_identity())  # Convert string to int
-    message = Message.query.filter_by(id=message_id, recipient_id=current_user_id).first()
-
-    if not message:
-        return jsonify({"error": "message not found"}), HTTPStatus.NOT_FOUND
-
-    if not message.delivered_at:
-        message.delivered_at = datetime.now(timezone.utc)
-        db.session.commit()
-
-    return jsonify({"message": "marked as delivered"}), HTTPStatus.OK
-
-
-@messages_bp.delete("/conversation/<email>")
-@jwt_required()
-def clear_conversation(email: str):
-    """Delete all messages in a conversation with a specific user."""
-    current_user_id = int(get_jwt_identity())  # Convert string to int
-    
-    # Find the other user
-    other_user = User.query.filter_by(email=email.lower(), is_active=True).first()
-    if not other_user:
-        return jsonify({"error": "user not found"}), HTTPStatus.NOT_FOUND
-    
-    # Delete all messages where current user is sender or recipient with the other user
-    deleted = Message.query.filter(
-        ((Message.sender_id == current_user_id) & (Message.recipient_id == other_user.id)) |
-        ((Message.sender_id == other_user.id) & (Message.recipient_id == current_user_id))
-    ).delete(synchronize_session=False)
-    
+    deleted = RoomMessage.query.filter_by(room_id=room.id).delete(synchronize_session=False)
+    room.last_message_at = None
     db.session.commit()
-    
+
+    # Notify all clients in the room
+    socketio.emit("messages_cleared", {"room_slug": room_slug}, room=f"room_{room_slug}")
+
     return jsonify({"message": f"Deleted {deleted} messages"}), HTTPStatus.OK
-
-
-@messages_bp.post("/<int:message_id>/read")
-@jwt_required()
-def mark_read(message_id: int):
-    """Mark a message as read."""
-    current_user_id = int(get_jwt_identity())  # Convert string to int
-    message = Message.query.filter_by(id=message_id, recipient_id=current_user_id).first()
-
-    if not message:
-        return jsonify({"error": "message not found"}), HTTPStatus.NOT_FOUND
-
-    if not message.read_at:
-        message.read_at = datetime.now(timezone.utc)
-        if not message.delivered_at:
-            message.delivered_at = message.read_at
-        db.session.commit()
-
-    return jsonify({"message": "marked as read"}), HTTPStatus.OK
-

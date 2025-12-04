@@ -6,7 +6,7 @@ from flask import Flask
 
 from .config import load_config
 from .extensions import cors, db, jwt, limiter, socketio
-from .models import Contact, Message, PublicKey, User
+from .models import ChatRoom, Contact, Message, PublicKey, RoomMessage, User
 from .routes.auth import auth_bp
 from .routes.contacts import contacts_bp
 from .routes.frontend import frontend_bp
@@ -99,7 +99,7 @@ def create_app(config_name: str | None = None) -> Flask:
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(contacts_bp, url_prefix="/api/contacts")
     app.register_blueprint(keys_bp, url_prefix="/api/keys")
-    app.register_blueprint(messages_bp, url_prefix="/api/messages")
+    app.register_blueprint(messages_bp, url_prefix="/api")
 
     # Create database tables
     with app.app_context():
