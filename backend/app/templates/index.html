@@ -1,15 +1,72 @@
 {% extends "base.html" %}
 
+{% block title %}Chat Rooms - Create or Join{% endblock %}
+
 {% block content %}
-<div class="auth-container">
-    <div class="auth-box">
-        <h1>VibeChat</h1>
-        <p class="subtitle">Secure End-to-End Encrypted Chat</p>
-        <div class="auth-buttons">
-            <a href="{{ url_for('frontend.login_page') }}" class="btn btn-primary">Login</a>
-            <a href="{{ url_for('frontend.register_page') }}" class="btn btn-secondary">Register</a>
+<div class="home-container">
+    <div class="home-box">
+        <h1>Chat Rooms</h1>
+        <p class="subtitle">Create or join a chat room with a custom URL</p>
+        
+        <div class="url-generator">
+            <div class="form-group">
+                <label for="roomUrl">Enter or generate a room URL:</label>
+                <input type="text" id="roomUrl" placeholder="enter a url or click generate" />
+                <button id="generateBtn" class="btn btn-secondary btn-block">Generate</button>
+            </div>
+            <button id="joinBtn" class="btn btn-primary btn-block">Join Room</button>
+        </div>
+        
+        <div class="info-section">
+            <h3>How it works:</h3>
+            <ul>
+                <li>Enter a custom room name or click "Generate" for a random one</li>
+                <li>Anyone with the same URL can join the same chat room</li>
+                <li>No signup or login required</li>
+                <li>Just set a username when you enter</li>
+            </ul>
         </div>
     </div>
 </div>
-{% endblock %}
 
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const roomUrlInput = document.getElementById('roomUrl');
+    const generateBtn = document.getElementById('generateBtn');
+    const joinBtn = document.getElementById('joinBtn');
+    
+    // Generate random room URL
+    generateBtn.addEventListener('click', () => {
+        const randomId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+        roomUrlInput.value = randomId;
+    });
+    
+    // Join room
+    joinBtn.addEventListener('click', () => {
+        const roomSlug = roomUrlInput.value.trim();
+        if (!roomSlug) {
+            alert('Please enter or generate a room URL');
+            return;
+        }
+        
+        // Navigate to chat page with room slug in hash
+        window.location.href = `/chat#${roomSlug}`;
+    });
+    
+    // Allow Enter key to join
+    roomUrlInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            joinBtn.click();
+        }
+    });
+    
+    // Check if there's a hash in the URL (user might have navigated directly)
+    if (window.location.hash) {
+        const roomSlug = window.location.hash.substring(1);
+        if (roomSlug) {
+            roomUrlInput.value = roomSlug;
+        }
+    }
+});
+</script>
+{% endblock %}

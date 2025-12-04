@@ -1,66 +1,62 @@
 {% extends "base.html" %}
 
-{% block title %}Chat - VibeChat{% endblock %}
+{% block title %}Chat Room{% endblock %}
 
 {% block content %}
-<div class="chat-container">
+<div id="usernameModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <h2>Set Your Username</h2>
+        <div class="form-group">
+            <label for="usernameInput">Username:</label>
+            <input type="text" id="usernameInput" placeholder="Enter your username" maxlength="100" />
+        </div>
+        <div class="form-group">
+            <button id="generateUsernameBtn" class="btn btn-secondary">Generate Random</button>
+        </div>
+        <button id="setUsernameBtn" class="btn btn-primary btn-block">Continue to Chat</button>
+        <div id="usernameError" class="error-message"></div>
+    </div>
+</div>
+
+<div id="chatContainer" class="chat-container" style="display: none;">
     <div class="chat-sidebar">
         <div class="sidebar-header">
-            <h2>VibeChat</h2>
-            <div class="user-info">
-                <span id="userEmail"></span>
-                <button id="logoutBtn" class="btn btn-small">Logout</button>
-            </div>
+            <h1 class="sidebar-brand">VibeChat</h1>
         </div>
-        
-        <div class="contacts-section">
-            <div class="section-header">
-                <h3>Contacts</h3>
-                <button id="addContactBtn" class="btn btn-small">+ Add</button>
+        <div class="sidebar-content">
+            <div class="users-section">
+                <div class="users-section-title">Active Users</div>
+                <div id="activeUsersList" class="users-list"></div>
             </div>
-            <div id="contactsList" class="contacts-list"></div>
+            <div class="users-section">
+                <div class="users-section-title">Past Users</div>
+                <div id="pastUsersList" class="users-list"></div>
+            </div>
         </div>
     </div>
     
     <div class="chat-main">
-        <div id="noChatSelected" class="no-chat-selected">
-            <p>Select a contact to start chatting</p>
+        <div class="chat-header-bar">
+            <div class="room-info">
+                <h2>Room: <span id="roomName"></span></h2>
+                <span id="currentUsername"></span>
+            </div>
+            <div class="chat-actions">
+                <button id="clearChatBtn" class="btn btn-small">Clear All Messages</button>
+                <button id="leaveRoomBtn" class="btn btn-small">Leave Room</button>
+            </div>
         </div>
         
-        <div id="chatWindow" class="chat-window" style="display: none;">
-            <div class="chat-header">
-                <div>
-                    <h3 id="chatContactName"></h3>
-                    <span id="chatContactEmail"></span>
-                </div>
-                <button id="clearChatBtn" class="btn btn-small" title="Clear chat history">Clear Chat</button>
-            </div>
-            <div id="messagesContainer" class="messages-container"></div>
+        <div id="messagesContainer" class="messages-container"></div>
+        
+        <div class="message-input-wrapper">
             <div class="message-input-container">
-                <input type="text" id="messageInput" placeholder="Type a message..." />
-                <button id="sendBtn" class="btn btn-primary">Send</button>
+                <input type="text" id="messageInput" placeholder="Type a message..." maxlength="10000" />
+                <button id="sendBtn" class="btn btn-primary btn-send">Send</button>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Add Contact Modal -->
-<div id="addContactModal" class="modal" style="display: none;">
-    <div class="modal-content">
-        <span class="close">&times;</span>
-        <h2>Add Contact</h2>
-        <form id="addContactForm">
-            <div class="form-group">
-                <label for="contactEmail">Email</label>
-                <input type="email" id="contactEmail" name="contactEmail" required>
-            </div>
-            <button type="submit" class="btn btn-primary">Add Contact</button>
-            <div id="contactError" class="error-message"></div>
-        </form>
-    </div>
-</div>
-
-<script src="{{ url_for('static', filename='js/crypto.js') }}"></script>
 <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
 {% endblock %}
-
